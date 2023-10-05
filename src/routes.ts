@@ -8,6 +8,7 @@ type LoginSession = {
   codeChallenge: string;
   codeVerifier: string;
   nonce: string | undefined;
+  timeAdded: Date;
 };
 
 const activeLogins = new Map<string, LoginSession>();
@@ -35,6 +36,7 @@ export function setupRoutes(server: Express, serverConfig: ServerConfig) {
       codeChallenge,
       codeVerifier,
       nonce,
+      timeAdded: new Date(),
     });
 
     resp.cookie('sid', sid, {
@@ -63,6 +65,7 @@ export function setupRoutes(server: Express, serverConfig: ServerConfig) {
       resp.status(403).send();
       return;
     }
+    activeLogins.delete(req.signedCookies.sid);
 
     const { codeVerifier, nonce } = data;
 
@@ -83,4 +86,20 @@ export function setupRoutes(server: Express, serverConfig: ServerConfig) {
       name: userinfo.data['myinfo.name'],
     });
   });
+
+  setInterval(() => {
+    console.log('Running active sessions GC');
+
+    const activeSessions = activeLogins.keys();
+    for (const sessionId of activeSessions) {
+      const sessionData = activeLogins.get(sessionId);
+      if (!sessionData) {
+        continue;
+      }
+      if (new Date().valueOf() - sessionData.timeAdded.valueOf() > 180000) {
+        console.log(`[GC] Clearing ${sessionId}`);
+        activeLogins.delete(sessionId);
+      }
+    }
+  }, 10000);
 }
